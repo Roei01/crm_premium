@@ -1,0 +1,88 @@
+version: "3.8"
+
+services:
+  api-gateway:
+    build: ./gateway/api-gateway
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT_GATEWAY=3000
+      - AUTH_SERVICE_URL=http://auth-service:3001
+      - USERS_SERVICE_URL=http://users-service:3002
+      - TASKS_SERVICE_URL=http://tasks-service:3003
+      - NODE_ENV=development
+    depends_on:
+      - auth-service
+      - users-service
+      - tasks-service
+    networks:
+      - crm-network
+
+  auth-service:
+    build: ./services/auth-service
+    ports:
+      - "3001:3001"
+    environment:
+      - PORT_AUTH=3001
+      - MONGODB_URI=${MONGODB_URI}
+      - JWT_SECRET=${JWT_SECRET}
+      - ACCESS_TOKEN_TTL_MINUTES=${ACCESS_TOKEN_TTL_MINUTES}
+      - REFRESH_TOKEN_TTL_DAYS=${REFRESH_TOKEN_TTL_DAYS}
+      - NODE_ENV=development
+    networks:
+      - crm-network
+
+  users-service:
+    build: ./services/users-service
+    ports:
+      - "3002:3002"
+    environment:
+      - PORT_USERS=3002
+      - MONGODB_URI=${MONGODB_URI}
+      - NODE_ENV=development
+    networks:
+      - crm-network
+
+  tasks-service:
+    build: ./services/tasks-service
+    ports:
+      - "3003:3003"
+    environment:
+      - PORT_TASKS=3003
+      - MONGODB_URI=${MONGODB_URI}
+    networks:
+      - crm-network
+
+  chat-service:
+    build: ./services/chat-service
+    ports:
+      - "3004:3004"
+    environment:
+      - PORT_CHAT=3004
+      - MONGODB_URI=${MONGODB_URI}
+      - JWT_SECRET=${JWT_SECRET}
+    networks:
+      - crm-network
+
+  notifications-service:
+    build: ./services/notifications-service
+    ports:
+      - "3005:3005"
+    environment:
+      - PORT_NOTIFICATIONS=3005
+      - MONGODB_URI=${MONGODB_URI}
+    networks:
+      - crm-network
+
+  web-frontend:
+    build: ./apps/web-frontend
+    ports:
+      - "3006:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:3000
+    networks:
+      - crm-network
+
+networks:
+  crm-network:
+    driver: bridge
