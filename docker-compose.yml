@@ -10,6 +10,9 @@ services:
       - AUTH_SERVICE_URL=http://auth-service:3001
       - USERS_SERVICE_URL=http://users-service:3002
       - TASKS_SERVICE_URL=http://tasks-service:3003
+      - CHAT_SERVICE_URL=http://chat-service:3004
+      - NOTIFICATIONS_SERVICE_URL=http://notifications-service:3005
+      - JWT_SECRET=${JWT_SECRET}
       - NODE_ENV=development
     depends_on:
       - auth-service
@@ -19,7 +22,8 @@ services:
       - crm-network
 
   auth-service:
-    build: ./services/auth-service
+    # build: ./services/auth-service
+    image: crm_premium-auth-service:latest
     ports:
       - "3001:3001"
     environment:
@@ -44,7 +48,8 @@ services:
       - crm-network
 
   tasks-service:
-    build: ./services/tasks-service
+    # build: ./services/tasks-service
+    image: crm_premium-tasks-service:latest
     ports:
       - "3003:3003"
     environment:
@@ -65,7 +70,8 @@ services:
       - crm-network
 
   notifications-service:
-    build: ./services/notifications-service
+    # build: ./services/notifications-service
+    image: crm_premium-notifications-service:latest
     ports:
       - "3005:3005"
     environment:

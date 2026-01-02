@@ -40,6 +40,8 @@ func FiberApp() *fiber.App {
 	api := app.Group("/notifications")
 	api.Post("/", handlers.CreateNotification)
 	api.Get("/", handlers.ListNotifications)
+	api.Get("/unread-count", handlers.GetUnreadCount)
+	api.Patch("/:id/read", handlers.MarkAsRead)
 
 	return app
 }

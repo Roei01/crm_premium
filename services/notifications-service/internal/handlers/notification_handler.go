@@ -70,3 +70,59 @@ func ListNotifications(c *fiber.Ctx) error {
 	return c.JSON(notifications)
 }
 
+func MarkAsRead(c *fiber.Ctx) error {
+	tenantID := c.Get("x-tenant-id")
+	userID := c.Get("x-user-id")
+	notificationID := c.Params("id")
+
+	if tenantID == "" || userID == "" {
+		return c.Status(401).JSON(fiber.Map{"message": "Unauthorized"})
+	}
+
+	objID, err := primitive.ObjectIDFromHex(notificationID)
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{"message": "Invalid notification ID"})
+	}
+
+	coll := config.GetCollection("notifications")
+	filter := bson.M{
+		"_id":         objID,
+		"tenantId":    tenantID,
+		"recipientId": userID,
+	}
+
+	update := bson.M{
+		"$set": bson.M{"isRead": true},
+	}
+
+	result, err := coll.UpdateOne(c.Context(), filter, update)
+	if err != nil || result.MatchedCount == 0 {
+		return c.Status(404).JSON(fiber.Map{"message": "Notification not found"})
+	}
+
+	return c.JSON(fiber.Map{"message": "Notification marked as read"})
+}
+
+func GetUnreadCount(c *fiber.Ctx) error {
+	tenantID := c.Get("x-tenant-id")
+	userID := c.Get("x-user-id")
+
+	if tenantID == "" || userID == "" {
+		return c.Status(401).JSON(fiber.Map{"message": "Unauthorized"})
+	}
+
+	coll := config.GetCollection("notifications")
+	filter := bson.M{
+		"tenantId":    tenantID,
+		"recipientId": userID,
+		"isRead":      false,
+	}
+
+	count, err := coll.CountDocuments(c.Context(), filter)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"message": "Error counting notifications"})
+	}
+
+	return c.JSON(fiber.Map{"unreadCount": count})
+}
+
