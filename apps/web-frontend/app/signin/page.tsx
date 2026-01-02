@@ -33,13 +33,14 @@ export default function LoginPage() {
     setError("");
     try {
       const response = await api.post("/auth/login", data);
-      const { token, tenantId, role, _id } = response.data;
+      const { token, tenantId, role, _id, firstName, lastName, email } =
+        response.data;
 
       // Store auth data
       localStorage.setItem("token", token);
       localStorage.setItem(
         "user",
-        JSON.stringify({ id: _id, role, tenantId, email: data.email })
+        JSON.stringify({ id: _id, role, tenantId, email, firstName, lastName })
       );
 
       // Redirect to dashboard

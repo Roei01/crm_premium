@@ -77,3 +77,83 @@ async def delete_task(id: str, request: Request):
         
     raise HTTPException(status_code=404, detail=f"Task {id} not found")
 
+@router.get("/stats/user/{user_id}", response_description="Get user task statistics")
+async def get_user_stats(user_id: str, request: Request):
+    tenant_id, _ = get_context(request)
+    
+    tasks_collection = db.get_db()["tasks"]
+    
+    # Count tasks by status
+    total_tasks = await tasks_collection.count_documents({
+        "tenantId": tenant_id,
+        "assigneeId": user_id
+    })
+    
+    todo_count = await tasks_collection.count_documents({
+        "tenantId": tenant_id,
+        "assigneeId": user_id,
+        "status": "TODO"
+    })
+    
+    in_progress_count = await tasks_collection.count_documents({
+        "tenantId": tenant_id,
+        "assigneeId": user_id,
+        "status": "IN_PROGRESS"
+    })
+    
+    done_count = await tasks_collection.count_documents({
+        "tenantId": tenant_id,
+        "assigneeId": user_id,
+        "status": "DONE"
+    })
+    
+    # Count by priority
+    high_priority = await tasks_collection.count_documents({
+        "tenantId": tenant_id,
+        "assigneeId": user_id,
+        "priority": "HIGH"
+    })
+    
+    # Count overdue tasks
+    from datetime import datetime
+    overdue_count = await tasks_collection.count_documents({
+        "tenantId": tenant_id,
+        "assigneeId": user_id,
+        "dueDate": {"$lt": datetime.utcnow()},
+        "status": {"$ne": "DONE"}
+    })
+    
+    return {
+        "userId": user_id,
+        "totalTasks": total_tasks,
+        "todoTasks": todo_count,
+        "inProgressTasks": in_progress_count,
+        "completedTasks": done_count,
+        "highPriorityTasks": high_priority,
+        "overdueTasks": overdue_count
+    }
+
+@router.get("/stats/overview", response_description="Get tenant-wide task overview")
+async def get_tenant_stats(request: Request):
+    tenant_id, _ = get_context(request)
+    
+    tasks_collection = db.get_db()["tasks"]
+    
+    # Aggregate by assignee
+    pipeline = [
+        {"$match": {"tenantId": tenant_id}},
+        {"$group": {
+            "_id": "$assigneeId",
+            "assigneeName": {"$first": "$assigneeName"},
+            "totalTasks": {"$sum": 1},
+            "completedTasks": {
+                "$sum": {"$cond": [{"$eq": ["$status", "DONE"]}, 1, 0]}
+            }
+        }}
+    ]
+    
+    cursor = tasks_collection.aggregate(pipeline)
+    results = await cursor.to_list(None)
+    
+    return {"stats": results}
+

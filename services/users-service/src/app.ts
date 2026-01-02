@@ -4,6 +4,7 @@ import helmet from "helmet";
 import morgan from "morgan";
 
 import userRoutes from "./routes/userRoutes";
+import customerRoutes from "./routes/customerRoutes";
 
 const app = express();
 
@@ -14,6 +15,7 @@ if (process.env.NODE_ENV !== "test") {
   app.use(morgan("dev"));
 }
 
+app.use("/customers", customerRoutes);
 app.use("/", userRoutes);
 
 app.get("/health", (req: Request, res: Response) => {

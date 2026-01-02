@@ -1,16 +1,26 @@
-import { Request, Response } from 'express';
-import User, { UserRole } from '../models/User';
-import jwt from 'jsonwebtoken';
-import { z } from 'zod';
+import { Request, Response } from "express";
+import User, { UserRole } from "../models/User";
+import jwt from "jsonwebtoken";
+import { z } from "zod";
 
-const generateToken = (id: string, role: string, tenantId: string) => {
-  const expiresIn = process.env.ACCESS_TOKEN_TTL_MINUTES 
-    ? `${process.env.ACCESS_TOKEN_TTL_MINUTES}m` 
-    : '15m';
+const generateToken = (
+  id: string,
+  role: string,
+  tenantId: string,
+  firstName: string,
+  lastName: string
+) => {
+  const expiresIn = process.env.ACCESS_TOKEN_TTL_MINUTES
+    ? `${process.env.ACCESS_TOKEN_TTL_MINUTES}m`
+    : "15m";
 
-  return jwt.sign({ id, role, tenantId }, process.env.JWT_SECRET!, {
-    expiresIn: expiresIn as any // Force casting to avoid TS mismatch with jwt types
-  });
+  return jwt.sign(
+    { id, role, tenantId, firstName, lastName },
+    process.env.JWT_SECRET!,
+    {
+      expiresIn: expiresIn as any, // Force casting to avoid TS mismatch with jwt types
+    }
+  );
 };
 
 const RegisterSchema = z.object({
@@ -19,7 +29,7 @@ const RegisterSchema = z.object({
   firstName: z.string(),
   lastName: z.string(),
   role: z.nativeEnum(UserRole).optional(),
-  tenantId: z.string().min(1)
+  tenantId: z.string().min(1),
 });
 
 export const register = async (req: Request, res: Response) => {
@@ -28,7 +38,7 @@ export const register = async (req: Request, res: Response) => {
 
     const userExists = await User.findOne({ email: validated.email });
     if (userExists) {
-      return res.status(400).json({ message: 'User already exists' });
+      return res.status(400).json({ message: "User already exists" });
     }
 
     // TODO: Phase 2 - Check permissions. Only Admin/TeamLead should create users.
@@ -42,26 +52,36 @@ export const register = async (req: Request, res: Response) => {
         email: user.email,
         role: user.role,
         tenantId: user.tenantId,
-        token: generateToken(user.id, user.role, user.tenantId)
+        firstName: user.firstName,
+        lastName: user.lastName,
+        token: generateToken(
+          user.id,
+          user.role,
+          user.tenantId,
+          user.firstName,
+          user.lastName
+        ),
       });
     } else {
-      res.status(400).json({ message: 'Invalid user data' });
+      res.status(400).json({ message: "Invalid user data" });
     }
   } catch (error: any) {
-    res.status(400).json({ message: error.message || 'Error registering user' });
+    res
+      .status(400)
+      .json({ message: error.message || "Error registering user" });
   }
 };
 
 const LoginSchema = z.object({
   email: z.string().email(),
-  password: z.string()
+  password: z.string(),
 });
 
 export const login = async (req: Request, res: Response) => {
   try {
     const { email, password } = LoginSchema.parse(req.body);
 
-    const user = await User.findOne({ email }).select('+password');
+    const user = await User.findOne({ email }).select("+password");
 
     if (user && (await user.comparePassword(password))) {
       res.json({
@@ -69,13 +89,20 @@ export const login = async (req: Request, res: Response) => {
         email: user.email,
         role: user.role,
         tenantId: user.tenantId,
-        token: generateToken(user.id, user.role, user.tenantId)
+        firstName: user.firstName,
+        lastName: user.lastName,
+        token: generateToken(
+          user.id,
+          user.role,
+          user.tenantId,
+          user.firstName,
+          user.lastName
+        ),
       });
     } else {
-      res.status(401).json({ message: 'Invalid email or password' });
+      res.status(401).json({ message: "Invalid email or password" });
     }
   } catch (error: any) {
-    res.status(400).json({ message: error.message || 'Error logging in' });
+    res.status(400).json({ message: error.message || "Error logging in" });
   }
 };
-

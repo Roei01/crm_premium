@@ -8,6 +8,7 @@ interface SocketUser {
   role: string;
   tenantId: string;
   firstName?: string;
+  lastName?: string;
 }
 
 export const initSocket = (httpServer: http.Server) => {
@@ -41,7 +42,8 @@ export const initSocket = (httpServer: http.Server) => {
           id: decoded.id,
           role: decoded.role,
           tenantId: decoded.tenantId,
-          firstName: "User", // ideally fetch from user-service, but for speed just use 'User' or store in token
+          firstName: decoded.firstName,
+          lastName: decoded.lastName
         };
         next();
       }
@@ -62,9 +64,13 @@ export const initSocket = (httpServer: http.Server) => {
       const { to, content } = data; // Changed from toUserId to to match frontend
 
       // Save to DB
+      const senderName = user.firstName && user.lastName 
+        ? `${user.firstName} ${user.lastName}` 
+        : (user.firstName || "User");
+
       const message = await Message.create({
         senderId: user.id,
-        senderName: user.firstName || "User", // TODO: Get real name
+        senderName: senderName,
         receiverId: to,
         content: content,
         tenantId: user.tenantId,

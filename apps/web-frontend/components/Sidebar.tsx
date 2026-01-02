@@ -10,6 +10,9 @@ import {
   Users,
   Bell,
   Settings,
+  Upload,
+  BarChart3,
+  PieChart,
 } from "lucide-react";
 import clsx from "clsx";
 
@@ -21,12 +24,19 @@ export default function Sidebar() {
   const navItems = [
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
     { name: "Tasks", href: "/dashboard/tasks", icon: CheckSquare },
+    { name: "My Stats", href: "/dashboard/stats", icon: BarChart3 },
     { name: "Chat", href: "/dashboard/chat", icon: MessageSquare },
     { name: "Notifications", href: "/dashboard/notifications", icon: Bell },
   ];
 
   if (isAdminOrLead) {
     navItems.push({ name: "Users", href: "/dashboard/users", icon: Users });
+    navItems.push({
+      name: "Team Stats",
+      href: "/dashboard/team-stats",
+      icon: PieChart,
+    });
+    navItems.push({ name: "Import", href: "/dashboard/import", icon: Upload });
   }
 
   // Always add settings at the end

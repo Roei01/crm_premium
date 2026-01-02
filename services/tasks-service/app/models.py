@@ -12,7 +12,9 @@ class TaskModel(BaseModel):
     description: Optional[str] = None
     status: str = "TODO" # TODO, IN_PROGRESS, DONE
     assigneeId: Optional[str] = None
+    assigneeName: Optional[str] = None
     priority: str = "MEDIUM" # LOW, MEDIUM, HIGH
+    dueDate: Optional[datetime] = None
     
     # System fields (populated from context)
     tenantId: str
@@ -38,6 +40,8 @@ class CreateTaskDto(BaseModel):
     status: Optional[str] = "TODO"
     priority: Optional[str] = "MEDIUM"
     assigneeId: Optional[str] = None
+    assigneeName: Optional[str] = None
+    dueDate: Optional[datetime] = None
 
 class UpdateTaskDto(BaseModel):
     title: Optional[str] = None
@@ -45,4 +49,6 @@ class UpdateTaskDto(BaseModel):
     status: Optional[str] = None
     priority: Optional[str] = None
     assigneeId: Optional[str] = None
+    assigneeName: Optional[str] = None
+    dueDate: Optional[datetime] = None
 
