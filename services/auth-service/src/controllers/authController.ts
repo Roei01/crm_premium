@@ -52,6 +52,8 @@ export const register = async (req: Request, res: Response) => {
         email: user.email,
         role: user.role,
         tenantId: user.tenantId,
+        firstName: user.firstName,
+        lastName: user.lastName,
         token: generateToken(
           user.id,
           user.role,
@@ -87,6 +89,8 @@ export const login = async (req: Request, res: Response) => {
         email: user.email,
         role: user.role,
         tenantId: user.tenantId,
+        firstName: user.firstName,
+        lastName: user.lastName,
         token: generateToken(
           user.id,
           user.role,

@@ -48,7 +48,7 @@ services:
       - crm-network
 
   tasks-service:
-    # build: ./services/tasks-service
+    build: ./services/tasks-service
     image: crm_premium-tasks-service:latest
     ports:
       - "3003:3003"
