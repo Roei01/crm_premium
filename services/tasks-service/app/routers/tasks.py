@@ -101,3 +101,73 @@ async def delete_task(id: str, request: Request):
         
     raise HTTPException(status_code=404, detail=f"Task {id} not found")
 
+@router.get("/stats/user/{user_id}", response_description="Get user task statistics")
+async def get_user_stats(user_id: str, request: Request):
+    tenant_id, requesting_user_id, user_role = get_context(request)
+    
+    # Users can only see their own stats unless they are ADMIN/TEAM_LEAD
+    if user_role not in ["ADMIN", "TEAM_LEAD"] and requesting_user_id != user_id:
+        raise HTTPException(status_code=403, detail="You can only view your own statistics")
+    
+    tasks = await db.get_db()["tasks"].find({
+        "tenantId": tenant_id,
+        "assigneeId": user_id
+    }).to_list(1000)
+    
+    total = len(tasks)
+    todo = len([t for t in tasks if t.get("status") == "TODO"])
+    in_progress = len([t for t in tasks if t.get("status") == "IN_PROGRESS"])
+    done = len([t for t in tasks if t.get("status") == "DONE"])
+    
+    high_priority = len([t for t in tasks if t.get("priority") == "HIGH"])
+    medium_priority = len([t for t in tasks if t.get("priority") == "MEDIUM"])
+    low_priority = len([t for t in tasks if t.get("priority") == "LOW"])
+    
+    return {
+        "userId": user_id,
+        "total": total,
+        "byStatus": {
+            "TODO": todo,
+            "IN_PROGRESS": in_progress,
+            "DONE": done
+        },
+        "byPriority": {
+            "HIGH": high_priority,
+            "MEDIUM": medium_priority,
+            "LOW": low_priority
+        }
+    }
+
+@router.get("/stats/overview", response_description="Get overview statistics (ADMIN/TEAM_LEAD only)")
+async def get_overview_stats(request: Request):
+    tenant_id, user_id, user_role = get_context(request)
+    
+    # Only ADMIN and TEAM_LEAD can see overview
+    if user_role not in ["ADMIN", "TEAM_LEAD"]:
+        raise HTTPException(status_code=403, detail="Only ADMIN or TEAM_LEAD can view overview statistics")
+    
+    tasks = await db.get_db()["tasks"].find({"tenantId": tenant_id}).to_list(1000)
+    
+    total = len(tasks)
+    todo = len([t for t in tasks if t.get("status") == "TODO"])
+    in_progress = len([t for t in tasks if t.get("status") == "IN_PROGRESS"])
+    done = len([t for t in tasks if t.get("status") == "DONE"])
+    
+    high_priority = len([t for t in tasks if t.get("priority") == "HIGH"])
+    medium_priority = len([t for t in tasks if t.get("priority") == "MEDIUM"])
+    low_priority = len([t for t in tasks if t.get("priority") == "LOW"])
+    
+    return {
+        "total": total,
+        "byStatus": {
+            "TODO": todo,
+            "IN_PROGRESS": in_progress,
+            "DONE": done
+        },
+        "byPriority": {
+            "HIGH": high_priority,
+            "MEDIUM": medium_priority,
+            "LOW": low_priority
+        }
+    }
+

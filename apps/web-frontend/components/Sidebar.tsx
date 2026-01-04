@@ -11,6 +11,8 @@ import {
   Bell,
   Settings,
   Upload,
+  BarChart3,
+  TrendingUp,
 } from "lucide-react";
 import clsx from "clsx";
 
@@ -24,11 +26,17 @@ export default function Sidebar() {
     { name: "Tasks", href: "/dashboard/tasks", icon: CheckSquare },
     { name: "Chat", href: "/dashboard/chat", icon: MessageSquare },
     { name: "Notifications", href: "/dashboard/notifications", icon: Bell },
+    { name: "My Stats", href: "/dashboard/stats", icon: BarChart3 },
   ];
 
   if (isAdminOrLead) {
     navItems.push({ name: "Users", href: "/dashboard/users", icon: Users });
     navItems.push({ name: "Import", href: "/dashboard/import", icon: Upload });
+    navItems.push({
+      name: "Team Stats",
+      href: "/dashboard/team-stats",
+      icon: TrendingUp,
+    });
   }
 
   // Always add settings at the end
