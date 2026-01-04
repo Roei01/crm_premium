@@ -10,6 +10,7 @@ import {
   Users,
   Bell,
   Settings,
+  Upload,
 } from "lucide-react";
 import clsx from "clsx";
 
@@ -27,6 +28,7 @@ export default function Sidebar() {
 
   if (isAdminOrLead) {
     navItems.push({ name: "Users", href: "/dashboard/users", icon: Users });
+    navItems.push({ name: "Import", href: "/dashboard/import", icon: Upload });
   }
 
   // Always add settings at the end

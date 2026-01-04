@@ -14,13 +14,18 @@ async def health_check():
 def get_context(request: Request):
     tenant_id = request.headers.get("x-tenant-id")
     user_id = request.headers.get("x-user-id")
+    user_role = request.headers.get("x-user-role")
     if not tenant_id or not user_id:
         raise HTTPException(status_code=401, detail="Missing user context")
-    return tenant_id, user_id
+    return tenant_id, user_id, user_role
 
 @router.post("/", response_description="Add new task", response_model=TaskModel)
 async def create_task(request: Request, task: CreateTaskDto = Body(...)):
-    tenant_id, user_id = get_context(request)
+    tenant_id, user_id, user_role = get_context(request)
+    
+    # Only ADMIN and TEAM_LEAD can create tasks
+    if user_role not in ["ADMIN", "TEAM_LEAD"]:
+        raise HTTPException(status_code=403, detail="Only ADMIN or TEAM_LEAD can create tasks")
     
     task_data = task.model_dump()
     task_data["tenantId"] = tenant_id
@@ -32,23 +37,38 @@ async def create_task(request: Request, task: CreateTaskDto = Body(...)):
 
 @router.get("/", response_description="List tasks", response_model=List[TaskModel])
 async def list_tasks(request: Request):
-    tenant_id, user_id = get_context(request)
-    # Filter by tenantId mandatory
-    tasks = await db.get_db()["tasks"].find({"tenantId": tenant_id}).to_list(1000)
+    tenant_id, user_id, user_role = get_context(request)
+    
+    # ADMIN and TEAM_LEAD see all tasks in their tenant
+    if user_role in ["ADMIN", "TEAM_LEAD"]:
+        tasks = await db.get_db()["tasks"].find({"tenantId": tenant_id}).to_list(1000)
+    else:
+        # EMPLOYEE sees only tasks assigned to them
+        tasks = await db.get_db()["tasks"].find({"tenantId": tenant_id, "assigneeId": user_id}).to_list(1000)
+    
     return tasks
 
 @router.get("/{id}", response_description="Get a single task", response_model=TaskModel)
 async def show_task(id: str, request: Request):
-    tenant_id, _ = get_context(request)
+    tenant_id, user_id, user_role = get_context(request)
     
-    if (task := await db.get_db()["tasks"].find_one({"_id": ObjectId(id), "tenantId": tenant_id})) is not None:
+    # EMPLOYEE can only see their own tasks
+    query = {"_id": ObjectId(id), "tenantId": tenant_id}
+    if user_role == "EMPLOYEE":
+        query["assigneeId"] = user_id
+    
+    if (task := await db.get_db()["tasks"].find_one(query)) is not None:
         return task
         
     raise HTTPException(status_code=404, detail=f"Task {id} not found")
 
 @router.put("/{id}", response_description="Update a task", response_model=TaskModel)
 async def update_task(id: str, request: Request, task: UpdateTaskDto = Body(...)):
-    tenant_id, _ = get_context(request)
+    tenant_id, user_id, user_role = get_context(request)
+    
+    # Only ADMIN and TEAM_LEAD can update tasks
+    if user_role not in ["ADMIN", "TEAM_LEAD"]:
+        raise HTTPException(status_code=403, detail="Only ADMIN or TEAM_LEAD can update tasks")
     
     task_data = {k: v for k, v in task.model_dump().items() if v is not None}
     
@@ -68,7 +88,11 @@ async def update_task(id: str, request: Request, task: UpdateTaskDto = Body(...)
 
 @router.delete("/{id}", response_description="Delete a task")
 async def delete_task(id: str, request: Request):
-    tenant_id, _ = get_context(request)
+    tenant_id, user_id, user_role = get_context(request)
+    
+    # Only ADMIN and TEAM_LEAD can delete tasks
+    if user_role not in ["ADMIN", "TEAM_LEAD"]:
+        raise HTTPException(status_code=403, detail="Only ADMIN or TEAM_LEAD can delete tasks")
     
     delete_result = await db.get_db()["tasks"].delete_one({"_id": ObjectId(id), "tenantId": tenant_id})
     
