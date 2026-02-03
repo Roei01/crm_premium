@@ -1,15 +1,15 @@
-import express from 'express';
-import http from 'http';
-import cors from 'cors';
-import helmet from 'helmet';
-import morgan from 'morgan';
-import dotenv from 'dotenv';
-import path from 'path';
-import { connectDB } from './config/db';
-import { initSocket } from './socket';
-import Message from './models/Message';
+import express from "express";
+import http from "http";
+import cors from "cors";
+import helmet from "helmet";
+import morgan from "morgan";
+import dotenv from "dotenv";
+import path from "path";
+import { connectDB } from "./config/db";
+import { initSocket } from "./socket";
+import Message from "./models/Message";
 
-dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
+dotenv.config({ path: path.resolve(__dirname, "../../../.env") });
 dotenv.config();
 
 const app = express();
@@ -20,37 +20,111 @@ initSocket(server);
 
 app.use(cors());
 app.use(helmet());
-app.use(morgan('dev'));
+app.use(morgan("dev"));
 app.use(express.json());
 
 const PORT = process.env.PORT_CHAT || 3004;
 
 // REST API for Chat History
-app.get('/messages/:userId', async (req, res) => {
+app.get("/messages/:userId", async (req, res) => {
   // Simple auth check from header (passed by gateway)
-  const currentUserId = req.headers['x-user-id'] as string;
-  const tenantId = req.headers['x-tenant-id'] as string;
+  const currentUserId = req.headers["x-user-id"] as string;
+  const tenantId = req.headers["x-tenant-id"] as string;
   const otherUserId = req.params.userId;
 
-  if (!currentUserId || !tenantId) return res.status(401).json({ message: 'Unauthorized' });
+  if (!currentUserId || !tenantId)
+    return res.status(401).json({ message: "Unauthorized" });
 
   try {
     const messages = await Message.find({
       tenantId: tenantId,
       $or: [
         { senderId: currentUserId, receiverId: otherUserId },
-        { senderId: otherUserId, receiverId: currentUserId }
-      ]
-    }).sort({ createdAt: 1 }).limit(100);
+        { senderId: otherUserId, receiverId: currentUserId },
+      ],
+    })
+      .sort({ createdAt: 1 })
+      .limit(100);
 
     res.json(messages);
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching history' });
+    res.status(500).json({ message: "Error fetching history" });
   }
 });
 
-app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'ok', service: 'chat-service' });
+// Get unread message count from a specific user
+app.get("/messages/:userId/unread-count", async (req, res) => {
+  const currentUserId = req.headers["x-user-id"] as string;
+  const tenantId = req.headers["x-tenant-id"] as string;
+  const otherUserId = req.params.userId;
+
+  if (!currentUserId || !tenantId)
+    return res.status(401).json({ message: "Unauthorized" });
+
+  try {
+    const count = await Message.countDocuments({
+      tenantId: tenantId,
+      senderId: otherUserId,
+      receiverId: currentUserId,
+      readAt: null,
+    });
+
+    res.json({ count });
+  } catch (error) {
+    res.status(500).json({ message: "Error fetching unread count" });
+  }
+});
+
+// Mark all messages from a specific user as read
+app.post("/messages/:userId/mark-read", async (req, res) => {
+  const currentUserId = req.headers["x-user-id"] as string;
+  const tenantId = req.headers["x-tenant-id"] as string;
+  const otherUserId = req.params.userId;
+
+  if (!currentUserId || !tenantId)
+    return res.status(401).json({ message: "Unauthorized" });
+
+  try {
+    await Message.updateMany(
+      {
+        tenantId: tenantId,
+        senderId: otherUserId,
+        receiverId: currentUserId,
+        readAt: null,
+      },
+      {
+        $set: { readAt: new Date() },
+      }
+    );
+
+    res.json({ message: "Messages marked as read" });
+  } catch (error) {
+    res.status(500).json({ message: "Error marking messages as read" });
+  }
+});
+
+// Mark a single message as read
+app.put("/messages/:messageId/read", async (req, res) => {
+  const currentUserId = req.headers["x-user-id"] as string;
+  const tenantId = req.headers["x-tenant-id"] as string;
+  const messageId = req.params.messageId;
+
+  if (!currentUserId || !tenantId)
+    return res.status(401).json({ message: "Unauthorized" });
+
+  try {
+    await Message.findByIdAndUpdate(messageId, {
+      $set: { readAt: new Date() },
+    });
+
+    res.json({ message: "Message marked as read" });
+  } catch (error) {
+    res.status(500).json({ message: "Error marking message as read" });
+  }
+});
+
+app.get("/health", (req, res) => {
+  res.status(200).json({ status: "ok", service: "chat-service" });
 });
 
 const start = async () => {
@@ -61,4 +135,3 @@ const start = async () => {
 };
 
 start();
-

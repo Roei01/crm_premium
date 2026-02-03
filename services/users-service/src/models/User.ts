@@ -14,6 +14,8 @@ export interface IUser extends Document {
   lastName: string;
   role: UserRole;
   tenantId: string;
+  deletedAt?: Date | null;
+  deletedBy?: string | null;
   comparePassword(candidatePassword: string): Promise<boolean>;
 }
 
@@ -48,6 +50,14 @@ const UserSchema: Schema = new Schema(
       type: String,
       required: true,
       index: true,
+    },
+    deletedAt: {
+      type: Date,
+      default: null,
+    },
+    deletedBy: {
+      type: String,
+      default: null,
     },
   },
   {

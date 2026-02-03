@@ -2,9 +2,10 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useAuth } from "@/app/context/AuthContext";
+import { useSearchParams } from "next/navigation";
 import api from "@/lib/api";
 import io, { Socket } from "socket.io-client";
-import { Send, User as UserIcon } from "lucide-react";
+import { Send, User as UserIcon, Search } from "lucide-react";
 
 interface User {
   id: string;
@@ -20,30 +21,67 @@ interface Message {
   receiverId?: string;
   content: string;
   createdAt: string;
+  readAt?: string | null;
 }
 
 export default function ChatPage() {
   const { user, token } = useAuth();
+  const searchParams = useSearchParams();
   const [users, setUsers] = useState<User[]>([]);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [socket, setSocket] = useState<Socket | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // 1. Fetch Users
+  // 1. Fetch Users & Unread Counts
   useEffect(() => {
-    const fetchUsers = async () => {
+    const fetchData = async () => {
       try {
-        const response = await api.get("/users");
-        // Filter out current user from the list
-        setUsers(response.data.filter((u: any) => u.id !== user?.id));
+        // Fetch users
+        const usersResponse = await api.get("/users");
+        const filteredUsers = usersResponse.data.filter(
+          (u: any) => u.id !== user?.id
+        );
+        setUsers(filteredUsers);
+
+        // Check if there's a user parameter in the URL
+        const userIdParam = searchParams.get("user");
+        if (userIdParam) {
+          const userToSelect = filteredUsers.find(
+            (u: User) => u.id === userIdParam
+          );
+          if (userToSelect) {
+            setSelectedUser(userToSelect);
+          }
+        }
+
+        // Fetch unread message counts for each user
+        const unreadPromises = filteredUsers.map(async (u: User) => {
+          try {
+            const response = await api.get(`/messages/${u.id}/unread-count`);
+            return { userId: u.id, count: response.data.count || 0 };
+          } catch {
+            return { userId: u.id, count: 0 };
+          }
+        });
+
+        const unreadData = await Promise.all(unreadPromises);
+        const unreadMap: Record<string, number> = {};
+        unreadData.forEach((item) => {
+          if (item.count > 0) {
+            unreadMap[item.userId] = item.count;
+          }
+        });
+        setUnreadCounts(unreadMap);
       } catch (err) {
         console.error("Failed to fetch users", err);
       }
     };
-    if (user) fetchUsers();
-  }, [user]);
+    if (user) fetchData();
+  }, [user, searchParams]);
 
   // 2. Initialize Socket
   useEffect(() => {
@@ -54,7 +92,7 @@ export default function ChatPage() {
       {
         auth: { token },
         path: "/socket.io",
-        transports: ["websocket"], // Force WebSocket
+        transports: ["websocket"],
       }
     );
 
@@ -63,7 +101,7 @@ export default function ChatPage() {
     });
 
     newSocket.on("receive_private_message", (message: Message) => {
-      // Only append if the message is from/to the selected user
+      // If it's the current conversation, add to messages
       if (
         (selectedUser && message.senderId === selectedUser.id) ||
         (selectedUser &&
@@ -72,6 +110,23 @@ export default function ChatPage() {
       ) {
         setMessages((prev) => [...prev, message]);
         scrollToBottom();
+
+        // If it's from the selected user and I'm the receiver, mark as read
+        if (
+          message.senderId === selectedUser.id &&
+          message.receiverId === user?.id
+        ) {
+          markAsRead(message.id);
+        }
+      } else if (
+        message.receiverId === user?.id &&
+        message.senderId !== user?.id
+      ) {
+        // Message from another user (not selected) - increment unread count
+        setUnreadCounts((prev) => ({
+          ...prev,
+          [message.senderId]: (prev[message.senderId] || 0) + 1,
+        }));
       }
     });
 
@@ -84,17 +139,9 @@ export default function ChatPage() {
     return () => {
       newSocket.disconnect();
     };
-  }, [token, selectedUser, user]); // Re-bind listener if selectedUser changes? No, better logic inside listener or state
+  }, [token, selectedUser, user]);
 
-  // Better approach for socket listener to access current state without re-connecting:
-  // Using a ref or just relying on the fact that we append to state.
-  // Actually, filtering inside the effect is tricky if selectedUser changes.
-  // Let's refine: The socket listener should just add to a global store or we filter in render?
-  // For simplicity: We add ALL incoming messages to state, and UI filters?
-  // No, that might be too much.
-  // Let's stick to: If we receive a message, and it belongs to the conversation, add it.
-
-  // 3. Fetch History when User Selected
+  // 3. Fetch History when User Selected & Mark as Read
   useEffect(() => {
     if (!selectedUser) return;
 
@@ -103,6 +150,21 @@ export default function ChatPage() {
         const response = await api.get(`/messages/${selectedUser.id}`);
         setMessages(response.data);
         scrollToBottom();
+
+        // Mark all messages from this user as read
+        const unreadMessages = response.data.filter(
+          (msg: Message) => msg.senderId === selectedUser.id && !msg.readAt
+        );
+
+        if (unreadMessages.length > 0) {
+          await api.post(`/messages/${selectedUser.id}/mark-read`);
+          // Reset unread count for this user
+          setUnreadCounts((prev) => {
+            const newCounts = { ...prev };
+            delete newCounts[selectedUser.id];
+            return newCounts;
+          });
+        }
       } catch (err) {
         console.error("Failed to fetch history", err);
       }
@@ -115,6 +177,14 @@ export default function ChatPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
+  const markAsRead = async (messageId: string) => {
+    try {
+      await api.put(`/messages/${messageId}/read`);
+    } catch (err) {
+      console.error("Failed to mark message as read", err);
+    }
+  };
+
   const sendMessage = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim() || !selectedUser || !socket) return;
@@ -125,51 +195,77 @@ export default function ChatPage() {
     };
 
     socket.emit("send_private_message", messageData);
-
-    // Optimistically add to UI (or wait for server ack? server emits back to sender too?)
-    // Our server implementation emits to BOTH sender and receiver room.
-    // So we don't need to manually add it here if the server echoes it back.
-    // Let's check server code:
-    // io.to(receiverSocketId).emit('receive_private_message', savedMessage);
-    // io.to(senderSocketId).emit('receive_private_message', savedMessage);
-    // Perfect.
-
     setNewMessage("");
   };
+
+  // Filter users based on search query
+  const filteredUsers = users.filter(
+    (u) =>
+      u.firstName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      u.lastName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      u.email.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
     <div className="flex h-[calc(100vh-8rem)] bg-white rounded-lg shadow overflow-hidden">
       {/* Users List Sidebar */}
-      <div className="w-1/3 border-r border-gray-200 overflow-y-auto">
+      <div className="w-1/3 border-r border-gray-200 flex flex-col">
         <div className="p-4 bg-gray-50 border-b border-gray-200">
-          <h2 className="text-lg font-medium text-gray-900">Users</h2>
+          <h2 className="text-lg font-medium text-gray-900 mb-3">Users</h2>
+          {/* Search Input */}
+          <div className="relative">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <Search className="h-4 w-4 text-gray-400" />
+            </div>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search users..."
+              className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+            />
+          </div>
         </div>
-        <ul className="divide-y divide-gray-200">
-          {users.map((u) => (
-            <li
-              key={u.id}
-              onClick={() => setSelectedUser(u)}
-              className={`p-4 cursor-pointer hover:bg-gray-50 transition-colors ${
-                selectedUser?.id === u.id
-                  ? "bg-indigo-50 hover:bg-indigo-50"
-                  : ""
-              }`}
-            >
-              <div className="flex items-center space-x-3">
-                <div className="flex-shrink-0">
-                  <div className="h-10 w-10 rounded-full bg-gray-300 flex items-center justify-center text-gray-600">
-                    <UserIcon className="h-6 w-6" />
+        <ul className="divide-y divide-gray-200 overflow-y-auto flex-1">
+          {filteredUsers.length === 0 ? (
+            <li className="p-6 text-center text-gray-500 text-sm">
+              No users found
+            </li>
+          ) : (
+            filteredUsers.map((u) => (
+              <li
+                key={u.id}
+                onClick={() => setSelectedUser(u)}
+                className={`p-4 cursor-pointer hover:bg-gray-50 transition-colors relative ${
+                  selectedUser?.id === u.id
+                    ? "bg-indigo-50 hover:bg-indigo-50"
+                    : ""
+                }`}
+              >
+                <div className="flex items-center space-x-3">
+                  <div className="flex-shrink-0 relative">
+                    <div className="h-10 w-10 rounded-full bg-gray-300 flex items-center justify-center text-gray-600">
+                      <UserIcon className="h-6 w-6" />
+                    </div>
+                    {/* Unread Badge */}
+                    {unreadCounts[u.id] && unreadCounts[u.id] > 0 && (
+                      <div className="absolute -top-1 -right-1 h-5 w-5 bg-red-500 rounded-full flex items-center justify-center">
+                        <span className="text-white text-xs font-bold">
+                          {unreadCounts[u.id] > 9 ? "9+" : unreadCounts[u.id]}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">
+                      {u.firstName} {u.lastName}
+                    </p>
+                    <p className="text-sm text-gray-500 truncate">{u.email}</p>
                   </div>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900 truncate">
-                    {u.firstName} {u.lastName}
-                  </p>
-                  <p className="text-sm text-gray-500 truncate">{u.email}</p>
-                </div>
-              </div>
-            </li>
-          ))}
+              </li>
+            ))
+          )}
         </ul>
       </div>
 
@@ -190,7 +286,7 @@ export default function ChatPage() {
                 const isMe = msg.senderId === user?.id;
                 return (
                   <div
-                    key={index} // MongoDB _id might be better if available
+                    key={msg.id || index}
                     className={`flex ${isMe ? "justify-end" : "justify-start"}`}
                   >
                     <div

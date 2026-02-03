@@ -66,9 +66,23 @@ async def show_task(id: str, request: Request):
 async def update_task(id: str, request: Request, task: UpdateTaskDto = Body(...)):
     tenant_id, user_id, user_role = get_context(request)
     
-    # Only ADMIN and TEAM_LEAD can update tasks
-    if user_role not in ["ADMIN", "TEAM_LEAD"]:
-        raise HTTPException(status_code=403, detail="Only ADMIN or TEAM_LEAD can update tasks")
+    # 1. Fetch existing task to check ownership/permissions
+    existing_task = await db.get_db()["tasks"].find_one({"_id": ObjectId(id), "tenantId": tenant_id})
+    if existing_task is None:
+        raise HTTPException(status_code=404, detail=f"Task {id} not found")
+
+    # 2. Check Permissions
+    # ADMIN/TEAM_LEAD can update any task
+    # EMPLOYEE can only update if they are the assignee
+    can_update = False
+    if user_role in ["ADMIN", "TEAM_LEAD"]:
+        can_update = True
+    elif user_role == "EMPLOYEE":
+        if existing_task.get("assigneeId") == user_id:
+            can_update = True
+    
+    if not can_update:
+        raise HTTPException(status_code=403, detail="Insufficient permissions to update this task")
     
     task_data = {k: v for k, v in task.model_dump().items() if v is not None}
     
@@ -81,10 +95,7 @@ async def update_task(id: str, request: Request, task: UpdateTaskDto = Body(...)
             if (updated_task := await db.get_db()["tasks"].find_one({"_id": ObjectId(id)})) is not None:
                 return updated_task
     
-    if (existing_task := await db.get_db()["tasks"].find_one({"_id": ObjectId(id), "tenantId": tenant_id})) is not None:
-        return existing_task
-        
-    raise HTTPException(status_code=404, detail=f"Task {id} not found")
+    return existing_task
 
 @router.delete("/{id}", response_description="Delete a task")
 async def delete_task(id: str, request: Request):

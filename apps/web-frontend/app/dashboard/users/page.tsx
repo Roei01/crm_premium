@@ -7,6 +7,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { Plus, Trash2, User as UserIcon } from "lucide-react";
+import Link from "next/link";
 
 interface User {
   id: string;
@@ -110,13 +111,22 @@ export default function UsersPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-semibold text-gray-900">Users</h1>
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          Add User
-        </button>
+        <div className="flex space-x-3">
+          <Link
+            href="/dashboard/users/deleted"
+            className="flex items-center px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
+          >
+            <Trash2 className="w-4 h-4 mr-2" />
+            Recycle Bin
+          </Link>
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Add User
+          </button>
+        </div>
       </div>
 
       <div className="bg-white shadow overflow-hidden sm:rounded-md">

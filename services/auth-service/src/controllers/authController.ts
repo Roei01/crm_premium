@@ -3,13 +3,13 @@ import User, { UserRole } from '../models/User';
 import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 
-const generateToken = (id: string, role: string, tenantId: string) => {
+const generateToken = (id: string, role: string, tenantId: string, firstName: string, lastName: string) => {
   const expiresIn = process.env.ACCESS_TOKEN_TTL_MINUTES 
     ? `${process.env.ACCESS_TOKEN_TTL_MINUTES}m` 
     : '15m';
 
-  return jwt.sign({ id, role, tenantId }, process.env.JWT_SECRET!, {
-    expiresIn: expiresIn as any // Force casting to avoid TS mismatch with jwt types
+  return jwt.sign({ id, role, tenantId, firstName, lastName }, process.env.JWT_SECRET!, {
+    expiresIn: expiresIn as any
   });
 };
 
@@ -42,7 +42,9 @@ export const register = async (req: Request, res: Response) => {
         email: user.email,
         role: user.role,
         tenantId: user.tenantId,
-        token: generateToken(user.id, user.role, user.tenantId)
+        firstName: user.firstName,
+        lastName: user.lastName,
+        token: generateToken(user.id, user.role, user.tenantId, user.firstName, user.lastName)
       });
     } else {
       res.status(400).json({ message: 'Invalid user data' });
@@ -69,7 +71,9 @@ export const login = async (req: Request, res: Response) => {
         email: user.email,
         role: user.role,
         tenantId: user.tenantId,
-        token: generateToken(user.id, user.role, user.tenantId)
+        firstName: user.firstName,
+        lastName: user.lastName,
+        token: generateToken(user.id, user.role, user.tenantId, user.firstName, user.lastName)
       });
     } else {
       res.status(401).json({ message: 'Invalid email or password' });

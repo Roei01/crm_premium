@@ -12,7 +12,9 @@ class TaskModel(BaseModel):
     description: Optional[str] = None
     status: str = "TODO" # TODO, IN_PROGRESS, DONE
     assigneeId: Optional[str] = None
+    assigneeName: Optional[str] = None
     priority: str = "MEDIUM" # LOW, MEDIUM, HIGH
+    dueDate: Optional[str] = None
     
     # System fields (populated from context)
     tenantId: str
@@ -28,7 +30,8 @@ class TaskModel(BaseModel):
                 "title": "Complete the report",
                 "description": "Monthly sales report",
                 "status": "TODO",
-                "priority": "HIGH"
+                "priority": "HIGH",
+                "dueDate": "2023-12-31"
             }
         }
 
@@ -38,6 +41,8 @@ class CreateTaskDto(BaseModel):
     status: Optional[str] = "TODO"
     priority: Optional[str] = "MEDIUM"
     assigneeId: Optional[str] = None
+    assigneeName: Optional[str] = None
+    dueDate: Optional[str] = None
 
 class UpdateTaskDto(BaseModel):
     title: Optional[str] = None
@@ -45,4 +50,6 @@ class UpdateTaskDto(BaseModel):
     status: Optional[str] = None
     priority: Optional[str] = None
     assigneeId: Optional[str] = None
+    assigneeName: Optional[str] = None
+    dueDate: Optional[str] = None
 

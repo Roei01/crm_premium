@@ -125,6 +125,18 @@ export default function TasksPage() {
     }
   };
 
+  const handleStatusChange = async (id: string, newStatus: string) => {
+    try {
+      await api.put(`/tasks/${id}`, { status: newStatus });
+      setTasks(
+        tasks.map((t) => (t.id === id ? { ...t, status: newStatus as any } : t))
+      );
+    } catch (err) {
+      console.error("Failed to update status", err);
+      alert("Failed to update status. Check permissions.");
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case "TODO":
@@ -186,13 +198,20 @@ export default function TasksPage() {
                         <p className="text-sm font-medium text-indigo-600 truncate">
                           {task.title}
                         </p>
-                        <span
-                          className={`ml-2 px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(
+                        <select
+                          value={task.status}
+                          onChange={(e) =>
+                            handleStatusChange(task.id, e.target.value)
+                          }
+                          className={`ml-2 text-xs font-semibold rounded-full border-0 py-1 pl-2 pr-8 cursor-pointer focus:ring-2 focus:ring-indigo-500 ${getStatusColor(
                             task.status
                           )}`}
+                          onClick={(e) => e.stopPropagation()}
                         >
-                          {task.status}
-                        </span>
+                          <option value="TODO">TODO</option>
+                          <option value="IN_PROGRESS">IN PROGRESS</option>
+                          <option value="DONE">DONE</option>
+                        </select>
                       </div>
                       <div className="flex items-center space-x-2">
                         <div

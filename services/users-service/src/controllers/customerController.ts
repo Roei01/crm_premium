@@ -18,9 +18,14 @@ export const importCustomers = async (req: Request, res: Response) => {
   try {
     const tenantId = req.headers["x-tenant-id"] as string;
     const userId = req.headers["x-user-id"] as string;
+    const userRole = req.headers["x-user-role"] as string;
 
     if (!tenantId || !userId) {
       return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    if (userRole !== "ADMIN" && userRole !== "TEAM_LEAD") {
+      return res.status(403).json({ message: "Insufficient permissions" });
     }
 
     // Parse and validate

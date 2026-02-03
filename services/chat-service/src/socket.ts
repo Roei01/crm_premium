@@ -2,6 +2,7 @@ import http from "http";
 import { Server } from "socket.io";
 import jwt from "jsonwebtoken";
 import Message from "./models/Message";
+import axios from "axios";
 
 interface SocketUser {
   id: string;
@@ -59,12 +60,12 @@ export const initSocket = (httpServer: http.Server) => {
 
     // Handle Private Message
     socket.on("send_private_message", async (data) => {
-      const { to, content } = data; // Changed from toUserId to to match frontend
+      const { to, content } = data;
 
       // Save to DB
       const message = await Message.create({
         senderId: user.id,
-        senderName: user.firstName || "User", // TODO: Get real name
+        senderName: user.firstName || "User",
         receiverId: to,
         content: content,
         tenantId: user.tenantId,
@@ -73,8 +74,32 @@ export const initSocket = (httpServer: http.Server) => {
       // Emit to receiver
       io.to(to).emit("receive_private_message", message);
 
-      // Emit back to sender (for their UI to update if they listen)
+      // Emit back to sender
       socket.emit("receive_private_message", message);
+
+      // Create notification for receiver
+      try {
+        const NOTIFICATIONS_SERVICE_URL =
+          process.env.NOTIFICATIONS_SERVICE_URL ||
+          "http://notifications-service:3005";
+
+        await axios.post(`${NOTIFICATIONS_SERVICE_URL}/notifications`, {
+          title: `New message from ${user.firstName || "User"}`,
+          message:
+            content.length > 50 ? content.substring(0, 50) + "..." : content,
+          userId: to,
+          tenantId: user.tenantId,
+          type: "MESSAGE",
+          metadata: {
+            senderId: user.id,
+            messageId: message.id,
+            chatWith: user.id,
+          },
+        });
+      } catch (error) {
+        console.error("Failed to create notification:", error);
+        // Don't fail the message send if notification creation fails
+      }
     });
 
     // Handle Room/Group Message (Optional for now)

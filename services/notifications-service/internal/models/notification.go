@@ -7,8 +7,8 @@ import (
 )
 
 type Notification struct {
-	ID        primitive.ObjectID `json:"id" bson:"_id,omitempty"`
-	Recipient string             `json:"recipientId" bson:"recipientId"`
+	ID        primitive.ObjectID `json:"_id" bson:"_id,omitempty"`
+	Recipient string             `json:"userId" bson:"recipientId"`
 	Title     string             `json:"title" bson:"title"`
 	Message   string             `json:"message" bson:"message"`
 	Type      string             `json:"type" bson:"type"` // e.g., INFO, WARNING, TASK_ASSIGNED
