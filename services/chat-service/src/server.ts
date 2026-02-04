@@ -26,11 +26,16 @@ app.use(express.json());
 const PORT = process.env.PORT_CHAT || 3004;
 
 // REST API for Chat History
-app.get("/messages/:userId", async (req, res) => {
+app.get("/:userId", async (req, res) => {
   // Simple auth check from header (passed by gateway)
   const currentUserId = req.headers["x-user-id"] as string;
   const tenantId = req.headers["x-tenant-id"] as string;
   const otherUserId = req.params.userId;
+
+  console.log("Fetching messages:");
+  console.log("Current User:", currentUserId);
+  console.log("Other User:", otherUserId);
+  console.log("Tenant:", tenantId);
 
   if (!currentUserId || !tenantId)
     return res.status(401).json({ message: "Unauthorized" });
@@ -46,14 +51,17 @@ app.get("/messages/:userId", async (req, res) => {
       .sort({ createdAt: 1 })
       .limit(100);
 
+    console.log("Found messages:", messages.length);
+
     res.json(messages);
   } catch (error) {
+    console.error("Error fetching messages:", error);
     res.status(500).json({ message: "Error fetching history" });
   }
 });
 
 // Get unread message count from a specific user
-app.get("/messages/:userId/unread-count", async (req, res) => {
+app.get("/:userId/unread-count", async (req, res) => {
   const currentUserId = req.headers["x-user-id"] as string;
   const tenantId = req.headers["x-tenant-id"] as string;
   const otherUserId = req.params.userId;
@@ -76,7 +84,7 @@ app.get("/messages/:userId/unread-count", async (req, res) => {
 });
 
 // Mark all messages from a specific user as read
-app.post("/messages/:userId/mark-read", async (req, res) => {
+app.post("/:userId/mark-read", async (req, res) => {
   const currentUserId = req.headers["x-user-id"] as string;
   const tenantId = req.headers["x-tenant-id"] as string;
   const otherUserId = req.params.userId;
@@ -104,7 +112,7 @@ app.post("/messages/:userId/mark-read", async (req, res) => {
 });
 
 // Mark a single message as read
-app.put("/messages/:messageId/read", async (req, res) => {
+app.put("/:messageId/read", async (req, res) => {
   const currentUserId = req.headers["x-user-id"] as string;
   const tenantId = req.headers["x-tenant-id"] as string;
   const messageId = req.params.messageId;

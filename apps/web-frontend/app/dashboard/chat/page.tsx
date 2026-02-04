@@ -35,6 +35,14 @@ export default function ChatPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  
+  // Ref to keep track of selected user inside socket listeners without recreating them
+  const selectedUserRef = useRef<User | null>(null);
+
+  // Sync ref with state
+  useEffect(() => {
+    selectedUserRef.current = selectedUser;
+  }, [selectedUser]);
 
   // 1. Fetch Users & Unread Counts
   useEffect(() => {
@@ -42,9 +50,12 @@ export default function ChatPage() {
       try {
         // Fetch users
         const usersResponse = await api.get("/users");
-        const filteredUsers = usersResponse.data.filter(
-          (u: any) => u.id !== user?.id
-        );
+        const filteredUsers = usersResponse.data
+          .filter((u: any) => (u.id || u._id) !== user?.id)
+          .map((u: any) => ({
+            ...u,
+            id: u.id || u._id,
+          }));
         setUsers(filteredUsers);
 
         // Check if there's a user parameter in the URL
@@ -59,14 +70,16 @@ export default function ChatPage() {
         }
 
         // Fetch unread message counts for each user
-        const unreadPromises = filteredUsers.map(async (u: User) => {
-          try {
-            const response = await api.get(`/messages/${u.id}/unread-count`);
-            return { userId: u.id, count: response.data.count || 0 };
-          } catch {
-            return { userId: u.id, count: 0 };
-          }
-        });
+        const unreadPromises = filteredUsers
+          .filter((u: User) => u.id) // Ensure ID exists
+          .map(async (u: User) => {
+            try {
+              const response = await api.get(`/messages/${u.id}/unread-count`);
+              return { userId: u.id, count: response.data.count || 0 };
+            } catch {
+              return { userId: u.id, count: 0 };
+            }
+          });
 
         const unreadData = await Promise.all(unreadPromises);
         const unreadMap: Record<string, number> = {};
@@ -83,9 +96,11 @@ export default function ChatPage() {
     if (user) fetchData();
   }, [user, searchParams]);
 
-  // 2. Initialize Socket
+  // 2. Initialize Socket (Run once when token is available)
   useEffect(() => {
     if (!token) return;
+
+    console.log("Initializing socket...");
 
     const newSocket = io(
       process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000",
@@ -93,6 +108,7 @@ export default function ChatPage() {
         auth: { token },
         path: "/socket.io",
         transports: ["websocket"],
+        reconnectionAttempts: 5,
       }
     );
 
@@ -101,32 +117,35 @@ export default function ChatPage() {
     });
 
     newSocket.on("receive_private_message", (message: Message) => {
-      // If it's the current conversation, add to messages
-      if (
-        (selectedUser && message.senderId === selectedUser.id) ||
-        (selectedUser &&
-          message.receiverId === selectedUser.id &&
-          message.senderId === user?.id)
-      ) {
-        setMessages((prev) => [...prev, message]);
-        scrollToBottom();
+      console.log("Received message:", message);
+      
+      const currentSelectedUser = selectedUserRef.current;
+      const currentUserId = user?.id;
 
-        // If it's from the selected user and I'm the receiver, mark as read
-        if (
-          message.senderId === selectedUser.id &&
-          message.receiverId === user?.id
-        ) {
-          markAsRead(message.id);
+      // Determine if the message belongs to the currently open chat
+      const isCurrentChat = 
+        currentSelectedUser && 
+        ((message.senderId === currentSelectedUser.id && message.receiverId === currentUserId) ||
+         (message.senderId === currentUserId && message.receiverId === currentSelectedUser.id));
+
+      if (isCurrentChat) {
+        setMessages((prev) => [...prev, message]);
+        // Scroll to bottom will be handled by the messages effect or manual call
+        
+        // If I received it (not sent it) and it's current chat, mark as read
+        if (message.senderId === currentSelectedUser.id) {
+            // Note: We can't easily call markAsRead here without complex circular deps or moving functions.
+            // But we can trigger it via API.
+            api.put(`/messages/${message.id}/read`).catch(console.error);
         }
-      } else if (
-        message.receiverId === user?.id &&
-        message.senderId !== user?.id
-      ) {
-        // Message from another user (not selected) - increment unread count
-        setUnreadCounts((prev) => ({
-          ...prev,
-          [message.senderId]: (prev[message.senderId] || 0) + 1,
-        }));
+      } else {
+        // Not current chat
+        if (message.receiverId === currentUserId && message.senderId !== currentUserId) {
+             setUnreadCounts((prev) => ({
+                ...prev,
+                [message.senderId]: (prev[message.senderId] || 0) + 1,
+              }));
+        }
       }
     });
 
@@ -137,20 +156,32 @@ export default function ChatPage() {
     setSocket(newSocket);
 
     return () => {
+      console.log("Disconnecting socket...");
       newSocket.disconnect();
     };
-  }, [token, selectedUser, user]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]); // Only re-run if token changes
+
+  // Scroll to bottom when messages change
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
 
   // 3. Fetch History when User Selected & Mark as Read
   useEffect(() => {
-    if (!selectedUser) return;
+    if (!selectedUser) {
+        setMessages([]); // Clear messages if no user selected
+        return;
+    }
+
+    // Clear messages immediately when switching user to avoid showing old chat
+    setMessages([]);
 
     const fetchHistory = async () => {
       try {
         const response = await api.get(`/messages/${selectedUser.id}`);
         setMessages(response.data);
-        scrollToBottom();
-
+        
         // Mark all messages from this user as read
         const unreadMessages = response.data.filter(
           (msg: Message) => msg.senderId === selectedUser.id && !msg.readAt
@@ -175,14 +206,6 @@ export default function ChatPage() {
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-
-  const markAsRead = async (messageId: string) => {
-    try {
-      await api.put(`/messages/${messageId}/read`);
-    } catch (err) {
-      console.error("Failed to mark message as read", err);
-    }
   };
 
   const sendMessage = (e: React.FormEvent) => {
