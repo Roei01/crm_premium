@@ -7,6 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import api from "@/lib/api";
 import Link from "next/link";
+import { useAuth } from "@/app/context/AuthContext";
 
 const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -17,6 +18,7 @@ type LoginFormData = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
   const router = useRouter();
+  const { login } = useAuth(); // Use context login method
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -35,16 +37,11 @@ export default function LoginPage() {
       const response = await api.post("/auth/login", data);
       const { token, tenantId, role, _id } = response.data;
 
-      // Store auth data
-      localStorage.setItem("token", token);
-      localStorage.setItem(
-        "user",
-        JSON.stringify({ id: _id, role, tenantId, email: data.email })
-      );
-
-      // Redirect to dashboard
-      router.push("/dashboard");
+      // Use the login function from AuthContext to update state properly
+      login(token, { id: _id, role, tenantId, email: data.email });
+      
     } catch (err: any) {
+      console.error(err);
       setError(err.response?.data?.message || "Failed to login");
     } finally {
       setLoading(false);

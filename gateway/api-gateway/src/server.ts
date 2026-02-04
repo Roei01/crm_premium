@@ -3,6 +3,7 @@ import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
 import proxy from "express-http-proxy";
+import { createProxyMiddleware } from "http-proxy-middleware";
 import dotenv from "dotenv";
 import path from "path";
 
@@ -40,9 +41,10 @@ app.use("/auth", proxy(AUTH_SERVICE_URL));
 // Proxy Websockets
 app.use(
   "/socket.io",
-  proxy(CHAT_SERVICE_URL, {
-    // @ts-ignore: proxyReqWs exists in express-http-proxy but missing in types
-    proxyReqWs: true,
+  createProxyMiddleware({
+    target: CHAT_SERVICE_URL,
+    ws: true,
+    changeOrigin: true,
   })
 );
 
