@@ -70,7 +70,11 @@ export default function TasksPage() {
   const fetchTasks = async () => {
     try {
       const response = await api.get("/tasks");
-      setTasks(response.data);
+      const mappedTasks = response.data.map((t: any) => ({
+        ...t,
+        id: t.id || t._id, // Ensure ID is mapped correctly
+      }));
+      setTasks(mappedTasks);
     } catch (err) {
       console.error("Failed to fetch tasks", err);
     } finally {
@@ -81,7 +85,12 @@ export default function TasksPage() {
   const fetchUsers = async () => {
     try {
       const response = await api.get("/users");
-      setUsers(response.data);
+      // Map _id to id if needed
+      const mappedUsers = response.data.map((u: any) => ({
+        ...u,
+        id: u.id || u._id,
+      }));
+      setUsers(mappedUsers);
     } catch (err) {
       console.error("Failed to fetch users", err);
     }
