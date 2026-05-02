@@ -11,16 +11,18 @@ interface SocketUser {
   lastName?: string;
 }
 
+// Track online users per tenant: tenantId -> Set<userId>
+const onlineUsers = new Map<string, Set<string>>();
+
 export const initSocket = (httpServer: http.Server) => {
   const io = new Server(httpServer, {
     cors: {
-      origin: "*", // Allow all for now, tighten later
+      origin: "*",
       methods: ["GET", "POST"],
     },
     path: "/socket.io",
   });
 
-  // Authentication Middleware
   io.use((socket, next) => {
     const token =
       socket.handshake.auth.token || socket.handshake.headers.authorization;
@@ -28,7 +30,6 @@ export const initSocket = (httpServer: http.Server) => {
       return next(new Error("Authentication error: No token provided"));
     }
 
-    // Clean "Bearer " if present
     const cleanToken = token.replace("Bearer ", "");
 
     jwt.verify(
@@ -37,13 +38,12 @@ export const initSocket = (httpServer: http.Server) => {
       (err: any, decoded: any) => {
         if (err) return next(new Error("Authentication error: Invalid token"));
 
-        // Attach user info to socket
         (socket as any).user = {
           id: decoded.id,
           role: decoded.role,
           tenantId: decoded.tenantId,
           firstName: decoded.firstName,
-          lastName: decoded.lastName
+          lastName: decoded.lastName,
         };
         next();
       }
@@ -54,39 +54,75 @@ export const initSocket = (httpServer: http.Server) => {
     const user = (socket as any).user as SocketUser;
     console.log(`User connected: ${user.id} (${user.tenantId})`);
 
-    // Join room for their own ID (for direct messages)
     socket.join(user.id);
-    // Join room for their tenant (for broadcast)
     socket.join(user.tenantId);
 
-    // Handle Private Message
-    socket.on("send_private_message", async (data) => {
-      const { to, content } = data; // Changed from toUserId to to match frontend
+    // Track online presence
+    if (!onlineUsers.has(user.tenantId)) {
+      onlineUsers.set(user.tenantId, new Set());
+    }
+    onlineUsers.get(user.tenantId)!.add(user.id);
+    io.to(user.tenantId).emit(
+      "online_users",
+      Array.from(onlineUsers.get(user.tenantId)!)
+    );
 
-      // Save to DB
-      const senderName = user.firstName && user.lastName 
-        ? `${user.firstName} ${user.lastName}` 
-        : (user.firstName || "User");
+    // Private message
+    socket.on("send_private_message", async (data) => {
+      const { to, content } = data;
+
+      const senderName =
+        user.firstName && user.lastName
+          ? `${user.firstName} ${user.lastName}`
+          : user.firstName || "User";
 
       const message = await Message.create({
         senderId: user.id,
-        senderName: senderName,
+        senderName,
         receiverId: to,
-        content: content,
+        content,
         tenantId: user.tenantId,
       });
 
-      // Emit to receiver
       io.to(to).emit("receive_private_message", message);
-
-      // Emit back to sender (for their UI to update if they listen)
       socket.emit("receive_private_message", message);
     });
 
-    // Handle Room/Group Message (Optional for now)
+    // Typing indicators
+    socket.on("typing", (data: { to: string }) => {
+      io.to(data.to).emit("user_typing", { userId: user.id });
+    });
+
+    socket.on("stop_typing", (data: { to: string }) => {
+      io.to(data.to).emit("user_stop_typing", { userId: user.id });
+    });
+
+    // Mark messages as read
+    socket.on("mark_read", async (data: { from: string }) => {
+      const now = new Date();
+      await Message.updateMany(
+        {
+          senderId: data.from,
+          receiverId: user.id,
+          tenantId: user.tenantId,
+          readAt: { $exists: false },
+        },
+        { $set: { readAt: now } }
+      );
+      // Notify the original sender their messages were read
+      io.to(data.from).emit("messages_read", {
+        by: user.id,
+        at: now.toISOString(),
+      });
+    });
 
     socket.on("disconnect", () => {
       console.log(`User disconnected: ${user.id}`);
+      const tenantOnline = onlineUsers.get(user.tenantId);
+      if (tenantOnline) {
+        tenantOnline.delete(user.id);
+        io.to(user.tenantId).emit("online_users", Array.from(tenantOnline));
+      }
     });
   });
 
