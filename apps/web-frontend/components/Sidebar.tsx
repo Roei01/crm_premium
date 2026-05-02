@@ -8,11 +8,13 @@ import {
   CheckSquare,
   MessageSquare,
   Users,
+  Users2,
   Bell,
   Settings,
   Upload,
   BarChart3,
   PieChart,
+  Calendar,
 } from "lucide-react";
 import clsx from "clsx";
 
@@ -25,6 +27,7 @@ export default function Sidebar() {
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
     { name: "Tasks", href: "/dashboard/tasks", icon: CheckSquare },
     { name: "My Stats", href: "/dashboard/stats", icon: BarChart3 },
+    { name: "Customers", href: "/dashboard/customers", icon: Users2 },
     { name: "Chat", href: "/dashboard/chat", icon: MessageSquare },
     { name: "Notifications", href: "/dashboard/notifications", icon: Bell },
   ];
