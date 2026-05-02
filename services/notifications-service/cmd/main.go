@@ -13,7 +13,6 @@ import (
 )
 
 func main() {
-	// Load .env from root if possible, otherwise rely on Docker env
 	_ = godotenv.Load("../../.env")
 
 	config.ConnectDB()
@@ -36,13 +35,13 @@ func FiberApp() *fiber.App {
 
 	app.Get("/health", handlers.HealthCheck)
 
-	// API Routes
 	api := app.Group("/notifications")
 	api.Post("/", handlers.CreateNotification)
 	api.Get("/", handlers.ListNotifications)
 	api.Get("/unread-count", handlers.GetUnreadCount)
+	api.Patch("/read-all", handlers.MarkAllRead)
 	api.Patch("/:id/read", handlers.MarkAsRead)
+	api.Delete("/:id", handlers.DeleteNotification)
 
 	return app
 }
-

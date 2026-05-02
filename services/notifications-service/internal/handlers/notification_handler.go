@@ -8,17 +8,14 @@ import (
 	"github.com/roi/crm/notifications-service/internal/models"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 func HealthCheck(c *fiber.Ctx) error {
-	return c.JSON(fiber.Map{
-		"status":  "ok",
-		"service": "notifications-service",
-	})
+	return c.JSON(fiber.Map{"status": "ok", "service": "notifications-service"})
 }
 
 func CreateNotification(c *fiber.Ctx) error {
-	// Context from Gateway headers
 	tenantID := c.Get("x-tenant-id")
 	if tenantID == "" {
 		return c.Status(401).JSON(fiber.Map{"message": "Unauthorized"})
@@ -52,12 +49,10 @@ func ListNotifications(c *fiber.Ctx) error {
 	}
 
 	coll := config.GetCollection("notifications")
-	filter := bson.M{
-		"tenantId":    tenantID,
-		"recipientId": userID,
-	}
+	filter := bson.M{"tenantId": tenantID, "recipientId": userID}
+	opts := options.Find().SetSort(bson.M{"createdAt": -1}).SetLimit(100)
 
-	cursor, err := coll.Find(c.Context(), filter)
+	cursor, err := coll.Find(c.Context(), filter, opts)
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{"message": "Error fetching notifications"})
 	}
@@ -85,15 +80,8 @@ func MarkAsRead(c *fiber.Ctx) error {
 	}
 
 	coll := config.GetCollection("notifications")
-	filter := bson.M{
-		"_id":         objID,
-		"tenantId":    tenantID,
-		"recipientId": userID,
-	}
-
-	update := bson.M{
-		"$set": bson.M{"isRead": true},
-	}
+	filter := bson.M{"_id": objID, "tenantId": tenantID, "recipientId": userID}
+	update := bson.M{"$set": bson.M{"isRead": true}}
 
 	result, err := coll.UpdateOne(c.Context(), filter, update)
 	if err != nil || result.MatchedCount == 0 {
@@ -101,6 +89,51 @@ func MarkAsRead(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{"message": "Notification marked as read"})
+}
+
+func MarkAllRead(c *fiber.Ctx) error {
+	tenantID := c.Get("x-tenant-id")
+	userID := c.Get("x-user-id")
+
+	if tenantID == "" || userID == "" {
+		return c.Status(401).JSON(fiber.Map{"message": "Unauthorized"})
+	}
+
+	coll := config.GetCollection("notifications")
+	filter := bson.M{"tenantId": tenantID, "recipientId": userID, "isRead": false}
+	update := bson.M{"$set": bson.M{"isRead": true}}
+
+	result, err := coll.UpdateMany(c.Context(), filter, update)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"message": "Error marking notifications as read"})
+	}
+
+	return c.JSON(fiber.Map{"updated": result.ModifiedCount})
+}
+
+func DeleteNotification(c *fiber.Ctx) error {
+	tenantID := c.Get("x-tenant-id")
+	userID := c.Get("x-user-id")
+	notificationID := c.Params("id")
+
+	if tenantID == "" || userID == "" {
+		return c.Status(401).JSON(fiber.Map{"message": "Unauthorized"})
+	}
+
+	objID, err := primitive.ObjectIDFromHex(notificationID)
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{"message": "Invalid notification ID"})
+	}
+
+	coll := config.GetCollection("notifications")
+	filter := bson.M{"_id": objID, "tenantId": tenantID, "recipientId": userID}
+
+	result, err := coll.DeleteOne(c.Context(), filter)
+	if err != nil || result.DeletedCount == 0 {
+		return c.Status(404).JSON(fiber.Map{"message": "Notification not found"})
+	}
+
+	return c.JSON(fiber.Map{"message": "Notification deleted"})
 }
 
 func GetUnreadCount(c *fiber.Ctx) error {
@@ -112,11 +145,7 @@ func GetUnreadCount(c *fiber.Ctx) error {
 	}
 
 	coll := config.GetCollection("notifications")
-	filter := bson.M{
-		"tenantId":    tenantID,
-		"recipientId": userID,
-		"isRead":      false,
-	}
+	filter := bson.M{"tenantId": tenantID, "recipientId": userID, "isRead": false}
 
 	count, err := coll.CountDocuments(c.Context(), filter)
 	if err != nil {
@@ -125,4 +154,3 @@ func GetUnreadCount(c *fiber.Ctx) error {
 
 	return c.JSON(fiber.Map{"unreadCount": count})
 }
-
