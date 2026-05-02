@@ -80,6 +80,31 @@ services:
     networks:
       - crm-network
 
+  email-service:
+    build: ./services/email-service
+    ports:
+      - "3007:3006"
+    environment:
+      - PORT_EMAIL=3006
+      - MONGODB_URI=${MONGODB_URI}
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASS=${SMTP_PASS:-}
+      - SMTP_FROM=${SMTP_FROM:-"CRM SaaS <noreply@crm.local>"}
+    networks:
+      - crm-network
+
+  meetings-service:
+    build: ./services/meetings-service
+    ports:
+      - "3008:3008"
+    environment:
+      - PORT_MEETINGS=3008
+      - MONGODB_URI=${MONGODB_URI}
+    networks:
+      - crm-network
+
   web-frontend:
     build: ./apps/web-frontend
     ports:

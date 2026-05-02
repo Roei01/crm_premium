@@ -33,6 +33,10 @@ const CHAT_SERVICE_URL =
   process.env.CHAT_SERVICE_URL || "http://localhost:3004";
 const NOTIFICATIONS_SERVICE_URL =
   process.env.NOTIFICATIONS_SERVICE_URL || "http://localhost:3005";
+const EMAIL_SERVICE_URL =
+  process.env.EMAIL_SERVICE_URL || "http://localhost:3006";
+const MEETINGS_SERVICE_URL =
+  process.env.MEETINGS_SERVICE_URL || "http://localhost:3008";
 
 import { verifyToken } from "./middleware/authMiddleware";
 
@@ -80,6 +84,8 @@ app.use(
   verifyToken,
   protectedProxy(NOTIFICATIONS_SERVICE_URL)
 );
+app.use("/emails", verifyToken, protectedProxy(EMAIL_SERVICE_URL));
+app.use("/meetings", verifyToken, protectedProxy(MEETINGS_SERVICE_URL));
 
 // Create HTTP server for WebSocket support
 const server = http.createServer(app);

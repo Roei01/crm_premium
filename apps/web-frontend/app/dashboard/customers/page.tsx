@@ -16,6 +16,7 @@ import {
   LayoutGrid,
   Trash2,
   User as UserIcon,
+  Send,
 } from "lucide-react";
 
 type CustomerStatus = "LEAD" | "PROSPECT" | "CUSTOMER" | "CHURNED";
@@ -82,6 +83,8 @@ const EMPTY_FORM = {
   status: "LEAD" as CustomerStatus,
 };
 
+const EMPTY_EMAIL_FORM = { subject: "", body: "" };
+
 export default function CustomersPage() {
   const { user } = useAuth();
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -93,6 +96,13 @@ export default function CustomersPage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+
+  // Email modal state
+  const [emailTarget, setEmailTarget] = useState<Customer | null>(null);
+  const [emailForm, setEmailForm] = useState(EMPTY_EMAIL_FORM);
+  const [emailSending, setEmailSending] = useState(false);
+  const [emailError, setEmailError] = useState("");
+  const [emailSuccess, setEmailSuccess] = useState("");
 
   const fetchCustomers = useCallback(async () => {
     try {
@@ -151,6 +161,32 @@ export default function CustomersPage() {
       setCustomers((prev) => prev.filter((c) => c._id !== customerId));
     } catch {
       /* ignore */
+    }
+  };
+
+  const handleSendEmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!emailTarget) return;
+    setEmailSending(true);
+    setEmailError("");
+    setEmailSuccess("");
+    try {
+      await api.post("/emails/send", {
+        to: emailTarget.email,
+        toName: `${emailTarget.firstName} ${emailTarget.lastName}`,
+        subject: emailForm.subject,
+        body: emailForm.body,
+      });
+      setEmailSuccess("Email sent successfully!");
+      setTimeout(() => {
+        setEmailTarget(null);
+        setEmailForm(EMPTY_EMAIL_FORM);
+        setEmailSuccess("");
+      }, 1500);
+    } catch (err: any) {
+      setEmailError(err.response?.data?.message || "Failed to send email");
+    } finally {
+      setEmailSending(false);
     }
   };
 
@@ -258,6 +294,7 @@ export default function CustomersPage() {
           customers={customers}
           onStatusChange={handleStatusChange}
           onDelete={handleDelete}
+          onEmail={setEmailTarget}
           getInitials={getInitials}
         />
       ) : (
@@ -265,8 +302,77 @@ export default function CustomersPage() {
           customers={customers}
           onMove={moveStatus}
           onDelete={handleDelete}
+          onEmail={setEmailTarget}
           getInitials={getInitials}
         />
+      )}
+
+      {/* Send Email Modal */}
+      {emailTarget && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
+            <div className="flex items-center justify-between px-6 py-4 border-b">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Send Email</h2>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  To: {emailTarget.firstName} {emailTarget.lastName} &lt;{emailTarget.email}&gt;
+                </p>
+              </div>
+              <button
+                onClick={() => { setEmailTarget(null); setEmailForm(EMPTY_EMAIL_FORM); setEmailError(""); setEmailSuccess(""); }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={handleSendEmail} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Subject *</label>
+                <input
+                  required
+                  value={emailForm.subject}
+                  onChange={(e) => setEmailForm((f) => ({ ...f, subject: e.target.value }))}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="Email subject"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Message *</label>
+                <textarea
+                  required
+                  value={emailForm.body}
+                  onChange={(e) => setEmailForm((f) => ({ ...f, body: e.target.value }))}
+                  rows={5}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                  placeholder="Write your message…"
+                />
+              </div>
+              {emailError && (
+                <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{emailError}</p>
+              )}
+              {emailSuccess && (
+                <p className="text-sm text-emerald-600 bg-emerald-50 rounded-lg px-3 py-2">{emailSuccess}</p>
+              )}
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => { setEmailTarget(null); setEmailForm(EMPTY_EMAIL_FORM); setEmailError(""); setEmailSuccess(""); }}
+                  className="flex-1 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={emailSending}
+                  className="flex-1 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  <Send className="w-4 h-4" />
+                  {emailSending ? "Sending…" : "Send Email"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
       {/* Create Customer Modal */}
@@ -417,11 +523,13 @@ function ListView({
   customers,
   onStatusChange,
   onDelete,
+  onEmail,
   getInitials,
 }: {
   customers: Customer[];
   onStatusChange: (id: string, status: CustomerStatus) => void;
   onDelete: (id: string) => void;
+  onEmail: (c: Customer) => void;
   getInitials: (c: Customer) => string;
 }) {
   if (customers.length === 0) {
@@ -511,12 +619,21 @@ function ListView({
                   {new Date(c.createdAt).toLocaleDateString()}
                 </td>
                 <td className="px-4 py-3">
-                  <button
-                    onClick={() => onDelete(c._id)}
-                    className="text-gray-400 hover:text-red-500 transition-colors"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => onEmail(c)}
+                      className="text-gray-400 hover:text-indigo-500 transition-colors"
+                      title="Send email"
+                    >
+                      <Mail className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => onDelete(c._id)}
+                      className="text-gray-400 hover:text-red-500 transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </td>
               </tr>
             );
@@ -532,11 +649,13 @@ function KanbanView({
   customers,
   onMove,
   onDelete,
+  onEmail,
   getInitials,
 }: {
   customers: Customer[];
   onMove: (customer: Customer, direction: "prev" | "next") => void;
   onDelete: (id: string) => void;
+  onEmail: (c: Customer) => void;
   getInitials: (c: Customer) => string;
 }) {
   return (
@@ -605,8 +724,16 @@ function KanbanView({
                     <Mail className="w-3 h-3 flex-shrink-0" />
                     {c.email}
                   </p>
+                  {/* Email button */}
+                  <button
+                    onClick={() => onEmail(c)}
+                    className="mt-2 w-full flex items-center justify-center gap-1 py-1 text-xs text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors border border-indigo-100"
+                  >
+                    <Mail className="w-3 h-3" />
+                    Send Email
+                  </button>
                   {/* Move buttons */}
-                  <div className="flex gap-2 mt-3">
+                  <div className="flex gap-2 mt-2">
                     <button
                       onClick={() => onMove(c, "prev")}
                       disabled={colIdx === 0}
